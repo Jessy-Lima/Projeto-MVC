@@ -9,7 +9,7 @@ from alembic import context
 from dotenv import load_dotenv
 import os 
 from app.database import Base
-from app.models import usuarios
+from app.models import usuario
 
 load_dotenv()
 # ----------- Edite aqui --------------
