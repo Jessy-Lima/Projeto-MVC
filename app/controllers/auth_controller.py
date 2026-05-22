@@ -50,15 +50,78 @@ def fazer_cadastro(
             {
                 "request": request,
                 "erro": "Este email já está cadastrado."
-            }
+            },
         )
     # Criar o usuário = criar o objeto
     novo_usuario = Usuario(
         nome=nome,
         email=email,
-        sennha=hash_senha(senha)
+        senha_hash=hash_senha(senha)
     )
     db.add(novo_usuario)
     db.commit()
-    return RedirectResponse("/auth/login", status_code=302)
+    return RedirectResponse("/auth/login?cadastro=ok", status_code=302)
 
+# Fazer o login
+@router.post("/login")
+def fazer_login(
+    request: Request,
+    email: str = Form(...),
+    senha: str = Form(...),
+    db: Session = Depends(get_db)
+):
+    # 1. Buscar o usuario pelo email no db
+    usuario = db.query(Usuario).filter_by(email=email).first()
+
+    #2. Verificar a senha com bcrtypt
+    senha_correta = (
+        usuario is not None and verificar_senha(senha, usuario.senha_hash)
+    )
+    if not senha_correta:
+        return templates.TemplateResponse(
+            request,
+            "auth/login.html",
+            {
+                "request": request,
+                "erro": "Email ou senha incorretos."
+            },
+        )
+    # Verificar e o usuario esta ativo
+    if not usuario.ativo:
+        return templates.TemplateResponse(
+            request,
+            "auth/login.html",
+            {
+                "request": request,
+                "erro": "Usuário inativo. Contate o administrador."
+            },
+        )
+
+    #3. Gerar o token JWT
+    token_data = {
+        "sub": usuario.email,
+        "nome": usuario.nome,
+        "role": usuario.role,
+        "id": usuario.id
+    }
+    token = criar_token(token_data)
+
+    #4. Salvar o tokem em um cookie e redirecionar para pagina home
+    response =RedirectResponse(url="/", status_code=302)
+
+    # Definir o cookie com o token JWT
+    response.set_cookie(
+        key="access_token",
+        value=token,
+        httponly=True,  # Impede acesso via JavaScript
+        max_age=3600,  # Expira em 1 hora
+        samesite="lax"  # Proteção contra CSRF
+    )
+    return response
+
+# Rota de sair
+@router.get("/logout")
+def sair():
+    response = RedirectResponse(url="/", status_code=302)
+    response.delete_cookie("access_token")
+    return response
